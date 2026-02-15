@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Teacher Dashboard</title>
+  <script type="module" src="js/teacher.js"></script>
+</head>
+<body>
+
+<h2>Create Quiz</h2>
+<input id="quizTitle" placeholder="Quiz Title">
+<button id="createQuizBtn">Create Quiz</button>
+
+<h3>Add Question</h3>
+<input id="questionText" placeholder="Question">
+<input id="opt0" placeholder="Option A">
+<input id="opt1" placeholder="Option B">
+<input id="opt2" placeholder="Option C">
+<input id="opt3" placeholder="Option D">
+<select id="correctIndex">
+  <option value="0">A</option>
+  <option value="1">B</option>
+  <option value="2">C</option>
+  <option value="3">D</option>
+</select>
+<button id="addQuestionBtn">Add Question</button>
+
+<h3>Your Quizzes</h3>
+<div id="quizList"></div>
+
+</body>
+</html>
