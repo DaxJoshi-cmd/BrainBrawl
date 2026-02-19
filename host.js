@@ -1,6 +1,6 @@
 import { db } from "./firebase.js";
 import {
-  ref, push, set, onValue, update, get
+  ref, push, set, update, onValue, get
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 const quizId = new URLSearchParams(window.location.search).get("quiz");
@@ -8,7 +8,7 @@ const quizId = new URLSearchParams(window.location.search).get("quiz");
 const sessionRef = push(ref(db, "sessions"));
 const sessionId = sessionRef.key;
 
-pin.innerText = sessionId.slice(-6);
+document.getElementById("pin").innerText = sessionId.slice(-6);
 
 await set(sessionRef, {
   quizId,
@@ -17,18 +17,23 @@ await set(sessionRef, {
 });
 
 let questions = [];
+let timerInterval = null;
 
+// Load questions
 const qSnap = await get(ref(db, `quizzes/${quizId}/questions`));
 questions = Object.values(qSnap.val());
 
+// Start quiz
 startBtn.onclick = async () => {
   await update(ref(db, `sessions/${sessionId}`), {
     status: "question",
-    questionStartTime: Date.now()
+    questionStartTime: Date.now(),
+    questionDuration: 10000 // 10 seconds
   });
 };
 
-onValue(ref(db, `sessions/${sessionId}`), (snap) => {
+// Real-time listener
+onValue(ref(db, `sessions/${sessionId}`), async (snap) => {
   const data = snap.val();
   if (!data) return;
 
@@ -36,21 +41,52 @@ onValue(ref(db, `sessions/${sessionId}`), (snap) => {
   playerCount.innerText = Object.keys(players).length + " Players";
 
   if (data.status === "question") {
-    const q = questions[data.currentQuestionIndex];
-    gameArea.innerHTML = `
-      <h3>${q.question}</h3>
-      <button onclick="reveal()">Reveal</button>
-    `;
+    showQuestion(data);
+    startTimer(data);
   }
 
   if (data.status === "reveal") {
+    clearInterval(timerInterval);
     showLeaderboard(players);
   }
 });
 
-window.reveal = async function() {
+// Show question
+function showQuestion(data) {
+  const q = questions[data.currentQuestionIndex];
+
+  gameArea.innerHTML = `
+    <h3>${q.question}</h3>
+    <button onclick="revealNow()">Reveal Answer</button>
+  `;
+}
+
+// Timer logic (SYNCHRONIZED)
+function startTimer(data) {
+  clearInterval(timerInterval);
+
+  timerInterval = setInterval(async () => {
+    const remaining =
+      data.questionDuration -
+      (Date.now() - data.questionStartTime);
+
+    const seconds = Math.max(Math.ceil(remaining / 1000), 0);
+    timer.innerText = seconds;
+
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      await revealNow();
+    }
+  }, 250);
+}
+
+// Reveal + Speed Scoring
+window.revealNow = async function () {
   const snap = await get(ref(db, `sessions/${sessionId}`));
   const data = snap.val();
+
+  if (data.status === "reveal") return;
+
   const players = data.players || {};
   const q = questions[data.currentQuestionIndex];
 
@@ -60,25 +96,36 @@ window.reveal = async function() {
     const p = players[pid];
 
     if (p.answer === q.correctIndex) {
-      const time = p.answeredAt - data.questionStartTime;
-      const score = Math.max(1000 - time / 10, 200);
+
+      const timeTaken =
+        p.answeredAt - data.questionStartTime;
+
+      const score = Math.max(
+        1000 - (timeTaken / 10),
+        200
+      );
+
       updates[`sessions/${sessionId}/players/${pid}/score`] =
         (p.score || 0) + score;
     }
   });
 
   await update(ref(db), updates);
-  await update(ref(db, `sessions/${sessionId}`), { status: "reveal" });
+
+  await update(ref(db, `sessions/${sessionId}`), {
+    status: "reveal"
+  });
 };
 
+// Leaderboard
 function showLeaderboard(players) {
   const sorted = Object.values(players)
     .sort((a, b) => b.score - a.score);
 
   gameArea.innerHTML = `
     <h2>Leaderboard</h2>
-    ${sorted.slice(0,5).map((p,i) =>
-      `<div>${i+1}. ${p.name} - ${Math.round(p.score)}</div>`
+    ${sorted.slice(0, 5).map((p, i) =>
+      `<div>${i + 1}. ${p.name} - ${Math.round(p.score)}</div>`
     ).join("")}
   `;
 }
